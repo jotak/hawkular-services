@@ -39,6 +39,7 @@ import rx.Subscriber;
  * @author Jirka Kremser
  */
 @WithValues
+// FIXME: obsolete?
 public class GetUrlCommand extends AbstractHttpCommand<String> {
 
     private String id;

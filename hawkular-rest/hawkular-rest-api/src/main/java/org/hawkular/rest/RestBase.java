@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Red Hat, Inc. and/or its affiliates
+ * Copyright 2016-2017 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,7 @@ package org.hawkular.rest;
 
 import javax.inject.Inject;
 
-import org.hawkular.inventory.rest.security.TenantId;
+//import org.hawkular.inventory.rest.security.TenantId;
 import org.jboss.resteasy.annotations.GZIP;
 
 /**
@@ -26,9 +26,10 @@ import org.jboss.resteasy.annotations.GZIP;
  * @since 0.0.1
  */
 @GZIP
+// FIXME: import @TenantId here?
 public class RestBase {
 
-    @Inject @TenantId
+    @Inject /*@TenantId*/
     // using the @AllPermissive annotation the tenant will be always the same
     private String tenantId;
 

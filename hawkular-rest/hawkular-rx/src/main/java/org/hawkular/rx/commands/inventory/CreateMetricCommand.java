@@ -42,6 +42,7 @@ import rx.Subscriber;
  * @author Jirka Kremser
  */
 @WithValues
+// FIXME: obsolete?
 public class CreateMetricCommand extends AbstractHttpCommand<String> {
 
     private Metric.Blueprint metric;

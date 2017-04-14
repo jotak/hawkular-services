@@ -43,6 +43,7 @@ import rx.Subscriber;
  * @author Jirka Kremser
  */
 @WithValues
+// FIXME: obsolete?
 public class CreateResourceCommand extends AbstractHttpCommand<String> {
 
     private Resource.Blueprint resource;

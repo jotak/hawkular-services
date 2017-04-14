@@ -56,19 +56,6 @@
       <scope>provided</scope>
     </dependency>
 
-    <!-- Hawkular Inventory dependencies -->
-    <dependency>
-      <groupId>org.hawkular.inventory</groupId>
-      <artifactId>hawkular-inventory-api</artifactId>
-      <scope>provided</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>org.hawkular.inventory</groupId>
-      <artifactId>hawkular-inventory-bus-api</artifactId>
-      <scope>provided</scope>
-    </dependency>
-
     <!-- Hawkular Metrics dependencies -->
     <dependency>
       <groupId>org.hawkular.metrics</groupId>

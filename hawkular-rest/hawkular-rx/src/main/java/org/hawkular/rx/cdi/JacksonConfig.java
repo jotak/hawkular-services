@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Red Hat, Inc. and/or its affiliates
+ * Copyright 2016-2017 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,14 +44,6 @@ public class JacksonConfig implements ContextResolver<ObjectMapper> {
     public JacksonConfig() {
         this.mapper = new ObjectMapper();
         initializeObjectMapper(this.mapper);
-
-//        SimpleModule relationshipModule = new SimpleModule("RelationshipModule",
-//                new Version(0, 1, 0, null, "org.hawkular.inventory",
-//                        "inventory-rest-api"));
-//        relationshipModule.addSerializer(Relationship.class, new RelationshipJacksonSerializer());
-//        relationshipModule.addDeserializer(Relationship.class, new RelationshipJacksonDeserializer());
-//
-//        this.mapper.registerModule(relationshipModule);
     }
 
     public static void initializeObjectMapper(ObjectMapper mapper) {

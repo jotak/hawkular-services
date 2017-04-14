@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Red Hat, Inc. and/or its affiliates
+ * Copyright 2016-2017 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,16 +75,14 @@ public class UpdateUrlCommand extends CreateUrlCommand {
                             updateResourceCommandInjector.select(Initialized.withValues(urlId, authToken, persona))
                                     .get();
 
-                    Resource.Update urlUpdate = Resource.Update.builder()
+                    Resource.Blueprint urlUpdate = new Resource.Blueprint.Builder()
                             .withProperty("url", url)
                             .withProperty("hwk-gui-domainSort", getDomainSorterUrl(url))
                             .build();
                     updateResourceCmd.setResource(urlUpdate);
                     Observable<String> observeResource = updateResourceCmd.toObservable();
 
-                    observeResource.subscribe((commandResponse) -> {
-                        observer.onNext(commandResponse);
-                    });
+                    observeResource.subscribe(observer::onNext);
 
                 } catch (Exception e) {
                     observer.onError(e);

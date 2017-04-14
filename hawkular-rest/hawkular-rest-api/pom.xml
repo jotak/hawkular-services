@@ -35,18 +35,13 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.hawkular.inventory</groupId>
-      <artifactId>hawkular-inventory-json-helper</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.hawkular.inventory</groupId>
-      <artifactId>hawkular-inventory-security-spi</artifactId>
+      <groupId>org.hawkular.commons</groupId>
+      <artifactId>hawkular-client-api</artifactId>
     </dependency>
 
     <dependency>
       <groupId>org.hawkular.commons</groupId>
-      <artifactId>hawkular-client-api</artifactId>
+      <artifactId>hawkular-inventory-paths</artifactId>
     </dependency>
 
     <dependency>
@@ -160,40 +155,4 @@
 
     </plugins>
   </build>
-
-  <profiles>
-    <profile>
-      <id>docgen</id>
-      <build>
-        <!-- Document generation from the Swagger annotations on the REST-API. -->
-        <plugins>
-          <plugin>
-            <groupId>com.github.kongchen</groupId>
-            <artifactId>swagger-maven-plugin</artifactId>
-            <configuration>
-              <apiSources>
-                <apiSource>
-                  <locations>org.hawkular.inventory.rest</locations>
-                  <apiVersion>0.1</apiVersion>
-                  <basePath>http://localhost:8080/hawkular/inventory</basePath>
-                  <outputTemplate>https://raw.githubusercontent.com/hawkular/hawkular.github.io/swagger/asciidoc.mustache</outputTemplate>
-                  <swaggerDirectory>${project.build.directory}/generated/swagger-ui</swaggerDirectory>
-                  <swaggerApiReader>com.wordnik.swagger.jaxrs.reader.DefaultJaxrsApiReader</swaggerApiReader>
-                  <outputPath>${project.build.directory}/generated/rest-inventory.adoc</outputPath>
-                </apiSource>
-              </apiSources>
-            </configuration>
-            <executions>
-              <execution>
-                <phase>compile</phase>
-                <goals>
-                  <goal>generate</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

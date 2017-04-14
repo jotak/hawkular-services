@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Red Hat, Inc. and/or its affiliates
+ * Copyright 2016-2017 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,11 +19,6 @@ package org.hawkular.rest.exception.mappers;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
-import org.hawkular.inventory.api.EntityAlreadyExistsException;
-import org.hawkular.inventory.api.EntityNotFoundException;
-import org.hawkular.inventory.api.RelationAlreadyExistsException;
-import org.hawkular.inventory.api.RelationNotFoundException;
-import org.hawkular.inventory.api.filters.Filter;
 import org.hawkular.rest.RestApiLogger;
 import org.hawkular.rest.json.ApiError;
 import org.jboss.logging.Logger;
@@ -55,75 +50,5 @@ public class ExceptionMapperUtils {
                 .entity(error)
                 .type(MediaType.APPLICATION_JSON_TYPE)
                 .build();
-    }
-
-    public static class EntityTypeAndPath {
-        private final String entityType;
-        private final Filter[][] paths;
-
-        public static EntityTypeAndPath fromException(EntityNotFoundException e) {
-            return new EntityTypeAndPath(e.getEntitySimpleTypeName(), e.getFilters());
-        }
-
-        public EntityTypeAndPath(String entityType, Filter[][] paths) {
-            this.entityType = entityType;
-            this.paths = paths;
-        }
-
-        public String getEntityType() {
-            return entityType;
-        }
-
-        public Filter[][] getPath() {
-            return paths;
-        }
-    }
-
-    public static class EntityIdAndPath {
-        private final String entityId;
-        private final Filter[][] paths;
-
-        public static EntityIdAndPath fromException(EntityAlreadyExistsException e) {
-            return new EntityIdAndPath(e.getEntityId(), e.getPaths());
-        }
-
-        public EntityIdAndPath(String entityId, Filter[][] paths) {
-            this.entityId = entityId;
-            this.paths = paths;
-        }
-
-        public String getEntityId() {
-            return entityId;
-        }
-
-        public Filter[][] getPaths() {
-            return paths;
-        }
-    }
-
-    public static class RelationshipNameAndPath {
-        private final String relationshipNameOrId;
-        private final Filter[][] paths;
-
-        public static RelationshipNameAndPath fromException(RelationNotFoundException e) {
-            return new RelationshipNameAndPath(e.getNameOrId(), e.getFilters());
-        }
-
-        public static RelationshipNameAndPath fromException(RelationAlreadyExistsException e) {
-            return new RelationshipNameAndPath(e.getRelationName(), e.getPath());
-        }
-
-        public RelationshipNameAndPath(String relationshipNameOrId, Filter[][] paths) {
-            this.relationshipNameOrId = relationshipNameOrId;
-            this.paths = paths;
-        }
-
-        public String getRelationshipNameOrId() {
-            return relationshipNameOrId;
-        }
-
-        public Filter[][] getPaths() {
-            return paths;
-        }
     }
 }
