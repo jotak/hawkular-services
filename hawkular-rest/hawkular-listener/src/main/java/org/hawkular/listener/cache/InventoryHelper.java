@@ -38,9 +38,11 @@ import org.hawkular.metrics.core.service.MetricsService;
 import org.hawkular.metrics.core.service.Order;
 import org.hawkular.metrics.model.DataPoint;
 import org.hawkular.metrics.model.Tenant;
+import org.jboss.logging.Logger;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 
 import rx.Observable;
@@ -51,6 +53,7 @@ import rx.Observable;
  */
 public final class InventoryHelper {
 
+    private static final Logger LOG = Logger.getLogger(InventoryHelper.class);
     private static final ObjectMapper MAPPER = new ObjectMapper(new JsonFactory());
 
     static {
@@ -78,13 +81,29 @@ public final class InventoryHelper {
     static Observable<MetricType.Blueprint> listMetricTypes(MetricsService metricsService,
                                                             String tenantId,
                                                             String feedId) {
+        return listMetricTypes(metricsService, tenantId, feedId, System.currentTimeMillis());
+    }
+
+    /**
+     * Get the list of all metric types for given tenant and feed, with enforced current time
+     */
+    static Observable<MetricType.Blueprint> listMetricTypes(MetricsService metricsService,
+                                                            String tenantId,
+                                                            String feedId,
+                                                            long currentTime) {
         String tags = "module:inventory,feed:" + feedId + ",type:mt";
         return metricsService.findMetricsWithFilters(tenantId, org.hawkular.metrics.model.MetricType.STRING, tags)
                 .flatMap(metric -> {
-                    return metricsService.findStringData(metric.getMetricId(), 0, System.currentTimeMillis(),
+                    return metricsService.findStringData(metric.getMetricId(), 0, currentTime,
                             false, 0, Order.DESC)
                             .toList()
                             .map(InventoryHelper::rebuildFromChunks)
+                            .doOnNext(inv -> {
+                                if (inv == null) {
+                                    LOG.warnf("Could not rebuild inventory from chunks for metric type %s. " +
+                                            "Expecting future calls to work correctly", metric.getId());
+                                }
+                            })
                             .filter(Objects::nonNull)
                             .map(inv -> inv.getStructure().get(RelativePath.fromString("")))
                             .filter(bp -> bp instanceof MetricType.Blueprint)
@@ -99,14 +118,31 @@ public final class InventoryHelper {
                                                            String tenantId,
                                                            String feedId,
                                                            MetricType.Blueprint metricType) {
+        return listMetricsForType(metricsService, tenantId, feedId, metricType, System.currentTimeMillis());
+    }
+
+    /**
+     * Get the list of metrics for given tenant, feed and metric type
+     */
+    static Observable<Metric.Blueprint> listMetricsForType(MetricsService metricsService,
+                                                           String tenantId,
+                                                           String feedId,
+                                                           MetricType.Blueprint metricType,
+                                                           long currentTime) {
         String escapedForRegex = Pattern.quote("|" + metricType.getId() + "|");
         String tags = "module:inventory,feed:" + feedId + ",type:r,mtypes:.*" + escapedForRegex + ".*";
         return metricsService.findMetricsWithFilters(tenantId, org.hawkular.metrics.model.MetricType.STRING, tags)
                 .flatMap(metric -> {
-                    return metricsService.findStringData(metric.getMetricId(), 0, System.currentTimeMillis(),
+                    return metricsService.findStringData(metric.getMetricId(), 0, currentTime,
                             false, 0, Order.DESC)
                             .toList()
                             .map(InventoryHelper::rebuildFromChunks)
+                            .doOnNext(inv -> {
+                                if (inv == null) {
+                                    LOG.warnf("Could not rebuild inventory from chunks for metrics of type" +
+                                            " %s. Expecting future calls to work correctly", metricType.getName());
+                                }
+                            })
                             .map(inv -> extractMetricsForType(inv, metricType.getId()))
                             .flatMap(Observable::from);
                 });
@@ -124,7 +160,8 @@ public final class InventoryHelper {
 
     }
 
-    private static ExtendedInventoryStructure rebuildFromChunks(List<DataPoint<String>> datapoints) {
+    @VisibleForTesting
+    static ExtendedInventoryStructure rebuildFromChunks(List<DataPoint<String>> datapoints) {
         if (datapoints.isEmpty()) {
             return null;
         }
@@ -139,12 +176,24 @@ public final class InventoryHelper {
                 if (master.length == 0) {
                     return null;
                 }
+                if (nbChunks > datapoints.size()) {
+                    // Sanity check: missing chunks?
+                    LOG.warnf("Inventory sanity check failure: %d chunks expected, only %d are available",
+                            nbChunks, datapoints.size());
+                    return null;
+                }
                 all = new byte[totalSize];
                 int pos = 0;
                 System.arraycopy(master, 0, all, pos, master.length);
                 pos += master.length;
                 for (int i = 1; i < nbChunks; i++) {
                     DataPoint<String> slaveNode = datapoints.get(i);
+                    // Perform sanity check using timestamps; they should all be contiguous, in decreasing order
+                    if (slaveNode.getTimestamp() != masterNode.getTimestamp() - i) {
+                        LOG.warnf("Inventory sanity check failure: chunk n°%d timestamp is %d. Expecting %d.",
+                                i, slaveNode.getTimestamp(), masterNode.getTimestamp() - i);
+                        return null;
+                    }
                     byte[] slave = decoder.decode(slaveNode.getValue().getBytes());
                     System.arraycopy(slave, 0, all, pos, slave.length);
                     pos += slave.length;
