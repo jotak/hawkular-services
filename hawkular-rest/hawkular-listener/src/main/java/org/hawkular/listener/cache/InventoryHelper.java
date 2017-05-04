@@ -78,10 +78,20 @@ public final class InventoryHelper {
     static Observable<MetricType.Blueprint> listMetricTypes(MetricsService metricsService,
                                                             String tenantId,
                                                             String feedId) {
+        return listMetricTypes(metricsService, tenantId, feedId, System.currentTimeMillis());
+    }
+
+    /**
+     * Get the list of all metric types for given tenant and feed, with enforced current time
+     */
+    static Observable<MetricType.Blueprint> listMetricTypes(MetricsService metricsService,
+                                                            String tenantId,
+                                                            String feedId,
+                                                            long currentTime) {
         String tags = "module:inventory,feed:" + feedId + ",type:mt";
         return metricsService.findMetricsWithFilters(tenantId, org.hawkular.metrics.model.MetricType.STRING, tags)
                 .flatMap(metric -> {
-                    return metricsService.findStringData(metric.getMetricId(), 0, System.currentTimeMillis(),
+                    return metricsService.findStringData(metric.getMetricId(), 0, currentTime,
                             false, 0, Order.DESC)
                             .toList()
                             .map(InventoryHelper::rebuildFromChunks)
@@ -99,11 +109,22 @@ public final class InventoryHelper {
                                                            String tenantId,
                                                            String feedId,
                                                            MetricType.Blueprint metricType) {
+        return listMetricsForType(metricsService, tenantId, feedId, metricType, System.currentTimeMillis());
+    }
+
+    /**
+     * Get the list of metrics for given tenant, feed and metric type
+     */
+    static Observable<Metric.Blueprint> listMetricsForType(MetricsService metricsService,
+                                                           String tenantId,
+                                                           String feedId,
+                                                           MetricType.Blueprint metricType,
+                                                           long currentTime) {
         String escapedForRegex = Pattern.quote("|" + metricType.getId() + "|");
         String tags = "module:inventory,feed:" + feedId + ",type:r,mtypes:.*" + escapedForRegex + ".*";
         return metricsService.findMetricsWithFilters(tenantId, org.hawkular.metrics.model.MetricType.STRING, tags)
                 .flatMap(metric -> {
-                    return metricsService.findStringData(metric.getMetricId(), 0, System.currentTimeMillis(),
+                    return metricsService.findStringData(metric.getMetricId(), 0, currentTime,
                             false, 0, Order.DESC)
                             .toList()
                             .map(InventoryHelper::rebuildFromChunks)
