@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPOutputStream;
 
 import org.hawkular.inventory.api.model.ExtendedInventoryStructure;
@@ -36,6 +37,7 @@ import org.hawkular.inventory.api.model.InventoryStructure;
 import org.hawkular.inventory.api.model.MetricDataType;
 import org.hawkular.inventory.api.model.MetricUnit;
 import org.hawkular.inventory.json.InventoryJacksonConfig;
+import org.hawkular.listener.exception.InvalidInventoryChunksException;
 import org.hawkular.metrics.core.service.MetricsService;
 import org.hawkular.metrics.core.service.Order;
 import org.hawkular.metrics.model.DataPoint;
@@ -182,15 +184,18 @@ public class InventoryHelperTest {
                 .thenReturn(Observable.just(dataPoint));
 
         // Test & assertions
-        List<org.hawkular.inventory.api.model.MetricType.Blueprint> collected = new CopyOnWriteArrayList<>();
+        AtomicReference<Throwable> refException = new AtomicReference<>();
         InventoryHelper.listMetricTypes(metricsService, "tenant", "feed", currentTime)
                 .toList()
-                .subscribe(collected::addAll, Throwables::propagate);
-        Assert.assertTrue(collected.isEmpty());
+                .subscribe(a -> {}, refException::set);
+        Assert.assertEquals(InvalidInventoryChunksException.class, refException.get().getCause().getClass());
+        Assert.assertTrue("Unexpected message: " + refException.get().getCause().getMessage(),
+                refException.get().getCause().getMessage().contains(
+                        "Inventory sanity check failure: 3 chunks expected, only 1 are available"));
     }
 
     @Test
-    public void shouldListEmptyMetricTypesWhenChunksAreInvalid() {
+    public void shouldFailOnListMetricTypesWhenChunksAreInvalid() {
         // Data & mocks
         Metric<String> m1 = new Metric<>("inventory.123.mt.m1", null, 7, MetricType.STRING, null);
         long currentTime = System.currentTimeMillis();
@@ -208,11 +213,14 @@ public class InventoryHelperTest {
                         buildMetricTypeDatapoint(currentTime - 800, "metricType1", "metric type 1")));
 
         // Test & assertions
-        List<org.hawkular.inventory.api.model.MetricType.Blueprint> collected = new CopyOnWriteArrayList<>();
+        AtomicReference<Throwable> refException = new AtomicReference<>();
         InventoryHelper.listMetricTypes(metricsService, "tenant", "feed", currentTime)
                 .toList()
-                .subscribe(collected::addAll, Throwables::propagate);
-        Assert.assertTrue(collected.isEmpty());
+                .subscribe(a -> {}, refException::set);
+        Assert.assertEquals(InvalidInventoryChunksException.class, refException.get().getCause().getClass());
+        Assert.assertTrue("Unexpected message: " + refException.get().getCause().getMessage(),
+                refException.get().getCause().getMessage().contains(
+                        "Inventory sanity check failure: chunk n°2 timestamp is"));
     }
 
     @Test
@@ -311,7 +319,43 @@ public class InventoryHelperTest {
     }
 
     @Test
-    public void shouldRebuildChunks() throws JsonProcessingException {
+    public void shouldListNoMetricsForTypeWhenChunksAreIncomplete() {
+        // Data & mocks
+        String tenant = "tenant";
+        String feed = "feed";
+        Metric<String> r1 = new Metric<>("inventory.123.r.r1", null, 7, MetricType.STRING, null);
+        long currentTime = System.currentTimeMillis();
+        when(metricsService.findMetricsWithFilters(anyString(), anyObject(), anyString()))
+                .thenAnswer(invocationOnMock -> Observable.just(r1));
+        DataPoint<String> tempDataPoint = buildRootResourceDatapointWithMetrics(tenant, feed, currentTime - 500, "r1");
+        DataPoint<String> dataPoint = new DataPoint<>(
+                tempDataPoint.getTimestamp(),
+                tempDataPoint.getValue(),
+                ImmutableMap.<String, String>builder().put("chunks", "3").put("size", "1000").build());
+        when(metricsService.findStringData(r1.getMetricId(), 0, currentTime, false, 0, Order.DESC))
+                .thenReturn(Observable.just(dataPoint));
+        org.hawkular.inventory.api.model.MetricType.Blueprint bp
+                = org.hawkular.inventory.api.model.MetricType.Blueprint
+                .builder(MetricDataType.GAUGE)
+                .withId("metricType1")
+                .withName("Metric type 1")
+                .withInterval(60L)
+                .withUnit(MetricUnit.BYTES)
+                .build();
+
+        // Test & assertions
+        AtomicReference<Throwable> refException = new AtomicReference<>();
+        InventoryHelper.listMetricsForType(metricsService, tenant, feed, bp, currentTime)
+                .toList()
+                .subscribe(a -> {}, refException::set);
+        Assert.assertEquals(InvalidInventoryChunksException.class, refException.get().getCause().getClass());
+        Assert.assertTrue("Unexpected message: " + refException.get().getCause().getMessage(),
+                refException.get().getCause().getMessage().contains(
+                        "Inventory sanity check failure: 3 chunks expected, only 1 are available"));
+    }
+
+    @Test
+    public void shouldRebuildChunks() throws JsonProcessingException, InvalidInventoryChunksException {
         org.hawkular.inventory.api.model.Resource.Blueprint bp
                 = org.hawkular.inventory.api.model.Resource.Blueprint.builder()
                 .withId("typeId")
@@ -339,8 +383,9 @@ public class InventoryHelperTest {
         Assert.assertEquals("typeId", inv.getStructure().getRoot().getId());
     }
 
-    @Test
-    public void shouldNotFailOnRebuildChunksSanityCheck() throws JsonProcessingException {
+    @Test(expected=InvalidInventoryChunksException.class)
+    public void shouldFailOnRebuildChunksSanityCheck()
+            throws JsonProcessingException, InvalidInventoryChunksException {
         org.hawkular.inventory.api.model.Resource.Blueprint bp
                 = org.hawkular.inventory.api.model.Resource.Blueprint.builder()
                 .withId("typeId")
@@ -362,13 +407,13 @@ public class InventoryHelperTest {
                 new DataPoint<>(80L, encoder.encodeToString(third)) // invalid timestamp
         );
 
-        // Now rebuild
-        ExtendedInventoryStructure inv = InventoryHelper.rebuildFromChunks(dataPoints);
-        Assert.assertNull(inv);
+        // Now rebuild & expect exception
+        InventoryHelper.rebuildFromChunks(dataPoints);
     }
 
-    @Test
-    public void shouldNotFailOnRebuildChunksWithNotEnoughDatapoints() throws JsonProcessingException {
+    @Test(expected=InvalidInventoryChunksException.class)
+    public void shouldFailOnRebuildChunksWithNotEnoughDatapoints()
+            throws JsonProcessingException, InvalidInventoryChunksException {
         org.hawkular.inventory.api.model.Resource.Blueprint bp
                 = org.hawkular.inventory.api.model.Resource.Blueprint.builder()
                 .withId("typeId")
@@ -388,9 +433,8 @@ public class InventoryHelperTest {
                 new DataPoint<>(99L, encoder.encodeToString(second))
         );
 
-        // Now rebuild
-        ExtendedInventoryStructure inv = InventoryHelper.rebuildFromChunks(dataPoints);
-        Assert.assertNull(inv);
+        // Now rebuild & expect exception
+        InventoryHelper.rebuildFromChunks(dataPoints);
     }
 
     private DataPoint<String> buildRootResourceDatapointWithMetrics(String tenant, String feed, long time, String resourceId) {

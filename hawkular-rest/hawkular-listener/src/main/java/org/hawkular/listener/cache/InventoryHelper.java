@@ -24,7 +24,6 @@ import java.util.Base64;
 import java.util.Base64.Decoder;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
@@ -34,6 +33,7 @@ import org.hawkular.inventory.api.model.Metric;
 import org.hawkular.inventory.api.model.MetricType;
 import org.hawkular.inventory.json.InventoryJacksonConfig;
 import org.hawkular.inventory.paths.RelativePath;
+import org.hawkular.listener.exception.InvalidInventoryChunksException;
 import org.hawkular.metrics.core.service.MetricsService;
 import org.hawkular.metrics.core.service.Order;
 import org.hawkular.metrics.model.DataPoint;
@@ -97,14 +97,14 @@ public final class InventoryHelper {
                     return metricsService.findStringData(metric.getMetricId(), 0, currentTime,
                             false, 0, Order.DESC)
                             .toList()
-                            .map(InventoryHelper::rebuildFromChunks)
-                            .doOnNext(inv -> {
-                                if (inv == null) {
-                                    LOG.warnf("Could not rebuild inventory from chunks for metric type %s. " +
-                                            "Expecting future calls to work correctly", metric.getId());
+                            .map(dataPoints -> {
+                                try {
+                                    return rebuildFromChunks(dataPoints);
+                                } catch (InvalidInventoryChunksException e) {
+                                    e.addContext("metricId", metric.getId());
+                                    throw Throwables.propagate(e);
                                 }
                             })
-                            .filter(Objects::nonNull)
                             .map(inv -> inv.getStructure().get(RelativePath.fromString("")))
                             .filter(bp -> bp instanceof MetricType.Blueprint)
                             .map(bp -> (MetricType.Blueprint) bp);
@@ -136,11 +136,13 @@ public final class InventoryHelper {
                     return metricsService.findStringData(metric.getMetricId(), 0, currentTime,
                             false, 0, Order.DESC)
                             .toList()
-                            .map(InventoryHelper::rebuildFromChunks)
-                            .doOnNext(inv -> {
-                                if (inv == null) {
-                                    LOG.warnf("Could not rebuild inventory from chunks for metrics of type" +
-                                            " %s. Expecting future calls to work correctly", metricType.getName());
+                            .map(dataPoints -> {
+                                try {
+                                    return rebuildFromChunks(dataPoints);
+                                } catch (InvalidInventoryChunksException e) {
+                                    e.addContext("metricType", metricType.getId());
+                                    e.addContext("metricId", metric.getId());
+                                    throw Throwables.propagate(e);
                                 }
                             })
                             .map(inv -> extractMetricsForType(inv, metricType.getId()))
@@ -149,10 +151,7 @@ public final class InventoryHelper {
     }
 
     private static List<Metric.Blueprint> extractMetricsForType(ExtendedInventoryStructure inv, String metricTypeId) {
-        if (inv == null || inv.getMetricTypesIndex() == null || !inv.getMetricTypesIndex().containsKey(metricTypeId)) {
-            return Collections.emptyList();
-        }
-        return inv.getMetricTypesIndex().get(metricTypeId).stream()
+        return inv.getMetricTypesIndex().getOrDefault(metricTypeId, Collections.emptyList()).stream()
                 .map(relPath -> inv.getStructure().get(RelativePath.fromString(relPath)))
                 .filter(bp -> bp instanceof Metric.Blueprint)
                 .map(bp -> (Metric.Blueprint)bp)
@@ -161,51 +160,51 @@ public final class InventoryHelper {
     }
 
     @VisibleForTesting
-    static ExtendedInventoryStructure rebuildFromChunks(List<DataPoint<String>> datapoints) {
+    static ExtendedInventoryStructure rebuildFromChunks(List<DataPoint<String>> datapoints)
+            throws InvalidInventoryChunksException {
         if (datapoints.isEmpty()) {
-            return null;
+            throw new InvalidInventoryChunksException("Missing inventory: no datapoint found. Did they expire?");
+        }
+        DataPoint<String> masterNode = datapoints.get(0);
+        Decoder decoder = Base64.getDecoder();
+        final byte[] all;
+        if (masterNode.getTags().containsKey("chunks")) {
+            int nbChunks = Integer.parseInt(masterNode.getTags().get("chunks"));
+            int totalSize = Integer.parseInt(masterNode.getTags().get("size"));
+            byte[] master = decoder.decode(masterNode.getValue().getBytes());
+            if (master.length == 0) {
+                throw new InvalidInventoryChunksException("Missing inventory: master datapoint exists but is empty");
+            }
+            if (nbChunks > datapoints.size()) {
+                // Sanity check: missing chunks?
+                throw new InvalidInventoryChunksException("Inventory sanity check failure: " + nbChunks
+                        + " chunks expected, only " + datapoints.size() + " are available");
+            }
+            all = new byte[totalSize];
+            int pos = 0;
+            System.arraycopy(master, 0, all, pos, master.length);
+            pos += master.length;
+            for (int i = 1; i < nbChunks; i++) {
+                DataPoint<String> slaveNode = datapoints.get(i);
+                // Perform sanity check using timestamps; they should all be contiguous, in decreasing order
+                if (slaveNode.getTimestamp() != masterNode.getTimestamp() - i) {
+                    throw new InvalidInventoryChunksException("Inventory sanity check failure: chunk n°" + i
+                            + " timestamp is " + slaveNode.getTimestamp() + ", expecting "
+                            + (masterNode.getTimestamp() - i));
+                }
+                byte[] slave = decoder.decode(slaveNode.getValue().getBytes());
+                System.arraycopy(slave, 0, all, pos, slave.length);
+                pos += slave.length;
+            }
+        } else {
+            // Not chunked
+            all = decoder.decode(masterNode.getValue().getBytes());
         }
         try {
-            DataPoint<String> masterNode = datapoints.get(0);
-            Decoder decoder = Base64.getDecoder();
-            final byte[] all;
-            if (masterNode.getTags().containsKey("chunks")) {
-                int nbChunks = Integer.parseInt(masterNode.getTags().get("chunks"));
-                int totalSize = Integer.parseInt(masterNode.getTags().get("size"));
-                byte[] master = decoder.decode(masterNode.getValue().getBytes());
-                if (master.length == 0) {
-                    return null;
-                }
-                if (nbChunks > datapoints.size()) {
-                    // Sanity check: missing chunks?
-                    LOG.warnf("Inventory sanity check failure: %d chunks expected, only %d are available",
-                            nbChunks, datapoints.size());
-                    return null;
-                }
-                all = new byte[totalSize];
-                int pos = 0;
-                System.arraycopy(master, 0, all, pos, master.length);
-                pos += master.length;
-                for (int i = 1; i < nbChunks; i++) {
-                    DataPoint<String> slaveNode = datapoints.get(i);
-                    // Perform sanity check using timestamps; they should all be contiguous, in decreasing order
-                    if (slaveNode.getTimestamp() != masterNode.getTimestamp() - i) {
-                        LOG.warnf("Inventory sanity check failure: chunk n°%d timestamp is %d. Expecting %d.",
-                                i, slaveNode.getTimestamp(), masterNode.getTimestamp() - i);
-                        return null;
-                    }
-                    byte[] slave = decoder.decode(slaveNode.getValue().getBytes());
-                    System.arraycopy(slave, 0, all, pos, slave.length);
-                    pos += slave.length;
-                }
-            } else {
-                // Not chunked
-                all = decoder.decode(masterNode.getValue().getBytes());
-            }
             String decompressed = decompress(all);
             return MAPPER.readValue(decompressed, ExtendedInventoryStructure.class);
-        } catch (Exception e) {
-            throw Throwables.propagate(e);
+        } catch (IOException e) {
+            throw new InvalidInventoryChunksException("Could not read assembled chunks", e);
         }
     }
 
