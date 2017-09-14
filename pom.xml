@@ -86,7 +86,6 @@
     <hawkular.rest.password /><!-- empty in the default profile, set only in the dev profile -->
   </properties>
 
-
   <profiles>
     <profile>
       <!-- A profile to build a development distro -->
