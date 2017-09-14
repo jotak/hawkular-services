@@ -1,6 +1,7 @@
 package org.hawkular.services.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,6 +15,8 @@ import org.hawkular.services.inventory.model.Resource;
 import org.hawkular.services.inventory.model.ResourceType;
 import org.junit.Before;
 import org.junit.Test;
+
+import junit.framework.AssertionFailedError;
 
 /**
  * @author Joel Takvorian
@@ -64,20 +67,20 @@ public class InventoryServiceTest {
 
     @Test
     public void shouldFindResourcesById() {
-        assertThat(service.findResourceById("EAP-1")).isPresent()
+        assertThat(service.getResourceById("EAP-1")).isPresent()
                 .map(Resource::getName)
                 .hasValue("EAP-1");
-        assertThat(service.findResourceById("EAP-2")).isPresent()
+        assertThat(service.getResourceById("EAP-2")).isPresent()
                 .map(Resource::getName)
                 .hasValue("EAP-2");
-        assertThat(service.findResourceById("child-1")).isPresent()
+        assertThat(service.getResourceById("child-1")).isPresent()
                 .map(Resource::getName)
                 .hasValue("Child 1");
     }
 
     @Test
     public void shouldNotFindResourcesById() {
-        assertThat(service.findResourceById("nada")).isNotPresent();
+        assertThat(service.getResourceById("nada")).isNotPresent();
     }
 
     @Test
@@ -109,24 +112,25 @@ public class InventoryServiceTest {
     }
 
     @Test
+    public void shouldGetNoNada() {
+        assertThat(service.getResourcesByType("nada")).isEmpty();
+    }
+
+    @Test
     public void shouldGetChildren() {
-        assertThat(service.getChildResources("EAP-1"))
-                .isPresent()
-                .hasValueSatisfying(children -> assertThat(children)
-                        .extracting(Resource::getId)
-                        .containsExactly("child-1", "child-2"));
+        Resource r = service.getResourceById("EAP-1").orElseThrow(AssertionFailedError::new);
+        service.loadSubtree(r);
+        assertThat(r.getChildren(a->null)) // this loader is not going to be called as children are already loaded
+                .extracting(Resource::getId)
+                .containsExactly("child-1", "child-2");
     }
 
     @Test
     public void shouldGetEmptyChildren() {
-        assertThat(service.getChildResources("child-1"))
-                .isPresent()
-                .hasValueSatisfying(children -> assertThat(children).isEmpty());
-    }
-
-    @Test
-    public void shouldNotGetChildren() {
-        assertThat(service.getChildResources("nada")).isNotPresent();
+        Resource r = service.getResourceById("child-1").orElseThrow(AssertionFailedError::new);
+        service.loadSubtree(r);
+        assertThat(r.getChildren(a->null)) // this loader is not going to be called as children are already loaded
+                .isEmpty();
     }
 
     @Test
@@ -148,5 +152,20 @@ public class InventoryServiceTest {
     @Test
     public void shouldNotGetMetrics() {
         assertThat(service.getResourceMetrics("nada")).isNotPresent();
+    }
+
+    @Test
+    public void shouldFailOnDetectedCycle() {
+        Resource corruptedParent = new Resource("CP", "CP", "FOO", "",
+                Arrays.asList("CC"), new ArrayList<>(), new HashMap<>());
+        Resource corruptedChild = new Resource("CC", "CC", "BAR", "CP",
+                Arrays.asList("CP"), new ArrayList<>(), new HashMap<>());
+        service.addResource(corruptedParent);
+        service.addResource(corruptedChild);
+        service.updateIndexes();
+
+        assertThatThrownBy(() -> service.loadSubtree(corruptedParent))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cycle detected");
     }
 }

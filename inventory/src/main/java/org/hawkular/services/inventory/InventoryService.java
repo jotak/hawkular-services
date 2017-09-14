@@ -18,10 +18,13 @@ package org.hawkular.services.inventory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -67,12 +70,29 @@ public class InventoryService {
         resourceTypesById = allResourceTypes.stream().collect(Collectors.toMap(ResourceType::getId, Function.identity()));
     }
 
-    public Optional<Resource> findResourceById(String id) {
+    public Optional<Resource> getResourceById(String id) {
         return Optional.ofNullable(resourcesById.get(id));
     }
 
+    public void loadSubtree(Resource parent) {
+        if (parent.getRootId().equals("")) {
+            // Optimisation, make sure eveything gets in cache; can be removed safely
+            resourcesByRoot.get(parent.getId());
+        }
+        loadSubtree(parent, new HashSet<>());
+    }
+
+    private void loadSubtree(Resource parent, Set<String> loaded) {
+        if (loaded.contains(parent.getId())) {
+            throw new IllegalStateException("Cycle detected in the tree with id " + parent.getId()
+                    + "; aborting operation. The inventory is invalid.");
+        }
+        loaded.add(parent.getId());
+        parent.getChildren(resourcesById::get).forEach(child -> loadSubtree(child, loaded));
+    }
+
     public Collection<Resource> getAllTopResources() {
-        return resourcesByRoot.get("");
+        return resourcesByRoot.getOrDefault("", Collections.emptyList());
     }
 
     public Collection<ResourceType> getAllResourceTypes() {
@@ -80,16 +100,11 @@ public class InventoryService {
     }
 
     public Collection<Resource> getResourcesByType(String typeId) {
-        return resourcesByType.get(typeId);
-    }
-
-    public Optional<Collection<Resource>> getChildResources(String id) {
-        return findResourceById(id)
-                .map(r -> r.getChildren(resourcesById::get));
+        return resourcesByType.getOrDefault(typeId, Collections.emptyList());
     }
 
     public Optional<Collection<Metric>> getResourceMetrics(String id) {
-        return findResourceById(id)
+        return getResourceById(id)
                 .map(r -> r.getMetrics(metricsById::get));
     }
 
