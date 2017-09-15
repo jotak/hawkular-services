@@ -20,11 +20,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -74,21 +72,12 @@ public class InventoryService {
         return Optional.ofNullable(resourcesById.get(id));
     }
 
-    public void loadSubtree(Resource parent) {
-        if (parent.getRootId().equals("")) {
-            // Optimisation, make sure eveything gets in cache; can be removed safely
-            resourcesByRoot.get(parent.getId());
-        }
-        loadSubtree(parent, new HashSet<>());
-    }
+    public Optional<ResourceNode> getTree(String parentId) {
+        // Optimisation, make sure eveything gets in cache; can be removed safely
+        resourcesByRoot.get(parentId);
 
-    private void loadSubtree(Resource parent, Set<String> loaded) {
-        if (loaded.contains(parent.getId())) {
-            throw new IllegalStateException("Cycle detected in the tree with id " + parent.getId()
-                    + "; aborting operation. The inventory is invalid.");
-        }
-        loaded.add(parent.getId());
-        parent.getChildren(resourcesById::get).forEach(child -> loadSubtree(child, loaded));
+        return getResourceById(parentId)
+                .map(r -> ResourceNode.fromResource(r, resourceTypesById::get, resourcesById::get, metricsById::get));
     }
 
     public Collection<Resource> getAllTopResources() {

@@ -118,19 +118,21 @@ public class InventoryServiceTest {
 
     @Test
     public void shouldGetChildren() {
-        Resource r = service.getResourceById("EAP-1").orElseThrow(AssertionFailedError::new);
-        service.loadSubtree(r);
-        assertThat(r.getChildren(a->null)) // this loader is not going to be called as children are already loaded
-                .extracting(Resource::getId)
+        ResourceNode tree = service.getTree("EAP-1").orElseThrow(AssertionFailedError::new);
+        assertThat(tree.getChildren())
+                .extracting(ResourceNode::getId)
                 .containsExactly("child-1", "child-2");
     }
 
     @Test
     public void shouldGetEmptyChildren() {
-        Resource r = service.getResourceById("child-1").orElseThrow(AssertionFailedError::new);
-        service.loadSubtree(r);
-        assertThat(r.getChildren(a->null)) // this loader is not going to be called as children are already loaded
-                .isEmpty();
+        ResourceNode tree = service.getTree("child-1").orElseThrow(AssertionFailedError::new);
+        assertThat(tree.getChildren()).isEmpty();
+    }
+
+    @Test
+    public void shouldNotGetTree() {
+        assertThat(service.getTree("nada")).isNotPresent();
     }
 
     @Test
@@ -164,7 +166,7 @@ public class InventoryServiceTest {
         service.addResource(corruptedChild);
         service.updateIndexes();
 
-        assertThatThrownBy(() -> service.loadSubtree(corruptedParent))
+        assertThatThrownBy(() -> service.getTree("CP"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Cycle detected");
     }

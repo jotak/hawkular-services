@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import org.hawkular.commons.log.MsgLogger;
 import org.hawkular.commons.log.MsgLogging;
@@ -46,7 +48,7 @@ public class InventoryHandler implements RestHandler {
 
     static final String INVENTORY_PATH = "/inventory";
 
-    private static final MsgLogger LOG = MsgLogging.getMsgLogger(StatusHandler.class);
+    private static final MsgLogger LOG = MsgLogging.getMsgLogger(InventoryHandler.class);
 
     private final InventoryService inventoryService;
 
@@ -101,47 +103,45 @@ public class InventoryHandler implements RestHandler {
         router.get(path + "/res/:id").handler(this::resourceById);
         router.get(path + "/type").handler(this::resourceTypes);
         router.get(path + "/type/:type").handler(this::resourceType);
+        router.get(path + "/tree/:id").handler(this::resourceTree);
     }
 
     private void resourceById(RoutingContext routing) {
         String id = routing.request().getParam("id");
         if (id == null) {
-            throw new ResponseUtil.BadRequestException("Missing parameter: id");
+            ResponseUtil.badRequest(routing, "Missing parameter: id");
+            return;
         }
-        String loadSubtree = routing.request().getParam("loadSubtree");
-        try {
-            Resource r = inventoryService.getResourceById(id)
-                    .orElseThrow(() -> new ResponseUtil.NotFoundException("Resource id " + id + " not found"));
-            if ("true".equals(loadSubtree)) {
-                inventoryService.loadSubtree(r);
-            }
-            JsonObject json = new JsonObject(Json.encode(r));
-            routing.response().end(json.encode());
-        } catch (Exception e) {
-            LOG.error(e.getMessage(), e);
-            throw new ResponseUtil.InternalServerException(e.toString());
-        }
+        queryOptional(() -> inventoryService.getResourceById(id),
+                routing,
+                "Resource id " + id + " not found")
+                .ifPresent(r -> {
+                    try {
+                        routing.response().end(Json.encode(r));
+                    } catch (Exception e) {
+                        LOG.error(e.getMessage(), e);
+                        ResponseUtil.internalServerError(routing, e.toString());
+                    }
+                });
     }
 
     private void topResources(RoutingContext routing) {
         try {
             Collection<Resource> resources = inventoryService.getAllTopResources();
-            JsonObject json = new JsonObject(Json.encode(resources));
-            routing.response().end(json.encode());
+            routing.response().end(Json.encode(resources));
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);
-            throw new ResponseUtil.InternalServerException(e.toString());
+            ResponseUtil.internalServerError(routing, e.toString());
         }
     }
 
     private void resourceTypes(RoutingContext routing) {
         try {
             Collection<ResourceType> types = inventoryService.getAllResourceTypes();
-            JsonObject json = new JsonObject(Json.encode(types));
-            routing.response().end(json.encode());
+            routing.response().end(Json.encode(types));
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);
-            throw new ResponseUtil.InternalServerException(e.toString());
+            ResponseUtil.internalServerError(routing, e.toString());
         }
     }
 
@@ -150,15 +150,18 @@ public class InventoryHandler implements RestHandler {
         if (type == null) {
             throw new ResponseUtil.BadRequestException("Missing parameter: type");
         }
-        try {
-            ResourceType rt = inventoryService.getResourceType(type)
-                    .orElseThrow(() -> new ResponseUtil.NotFoundException("Resource type " + type + " not found"));
-            JsonObject json = new JsonObject(Json.encode(rt));
-            routing.response().end(json.encode());
-        } catch (Exception e) {
-            LOG.error(e.getMessage(), e);
-            throw new ResponseUtil.InternalServerException(e.toString());
-        }
+        queryOptional(() -> inventoryService.getResourceType(type),
+                routing,
+                "Resource type " + type + " not found")
+                .ifPresent(rt -> {
+                    try {
+                        JsonObject json = new JsonObject(Json.encode(rt));
+                        routing.response().end(json.encode());
+                    } catch (Exception e) {
+                        LOG.error(e.getMessage(), e);
+                        ResponseUtil.internalServerError(routing, e.toString());
+                    }
+                });
     }
 
     private void resourcesByType(RoutingContext routing) {
@@ -166,17 +169,12 @@ public class InventoryHandler implements RestHandler {
         if (type == null) {
             throw new ResponseUtil.BadRequestException("Missing parameter: type");
         }
-        String loadSubtree = routing.request().getParam("loadSubtree");
         try {
             Collection<Resource> resources = inventoryService.getResourcesByType(type);
-            if ("true".equals(loadSubtree)) {
-                resources.forEach(inventoryService::loadSubtree);
-            }
-            JsonObject json = new JsonObject(Json.encode(resources));
-            routing.response().end(json.encode());
+            routing.response().end(Json.encode(resources));
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);
-            throw new ResponseUtil.InternalServerException(e.toString());
+            ResponseUtil.internalServerError(routing, e.toString());
         }
     }
 
@@ -188,11 +186,43 @@ public class InventoryHandler implements RestHandler {
         try {
             Collection<Metric> metrics = inventoryService.getResourceMetrics(id)
                     .orElseThrow(() -> new ResponseUtil.NotFoundException("Resource id " + id + " not found"));
-            JsonObject json = new JsonObject(Json.encode(metrics));
-            routing.response().end(json.encode());
+            routing.response().end(Json.encode(metrics));
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);
-            throw new ResponseUtil.InternalServerException(e.toString());
+            ResponseUtil.internalServerError(routing, e.toString());
         }
+    }
+
+    private static <T> Optional<T> queryOptional(Supplier<Optional<T>> supplier, RoutingContext routing, String msg) {
+        try {
+            Optional<T> result = supplier.get();
+            if (!result.isPresent()) {
+                ResponseUtil.notFound(routing, msg);
+            }
+            return result;
+        } catch (Exception e) {
+            LOG.error(e.getMessage(), e);
+            ResponseUtil.internalServerError(routing, e.toString());
+            return Optional.empty();
+        }
+    }
+
+    private void resourceTree(RoutingContext routing) {
+        String id = routing.request().getParam("id");
+        if (id == null) {
+            ResponseUtil.badRequest(routing, "Missing parameter: id");
+            return;
+        }
+        queryOptional(() -> inventoryService.getTree(id),
+                routing,
+                "Resource id " + id + " not found")
+                .ifPresent(tree -> {
+                    try {
+                        routing.response().end(Json.encode(tree));
+                    } catch (Exception e) {
+                        LOG.error(e.getMessage(), e);
+                        ResponseUtil.internalServerError(routing, e.toString());
+                    }
+                });
     }
 }
