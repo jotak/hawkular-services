@@ -46,7 +46,8 @@
     <module>commons</module>
     <module>dist</module>
     <module>inventory-model</module>
-    <module>inventory</module>
+    <module>inventory-api</module>
+    <module>inventory-service</module>
     <module>rest-handlers</module>
     <!--
 

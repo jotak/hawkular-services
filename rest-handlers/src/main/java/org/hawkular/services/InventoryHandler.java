@@ -27,7 +27,7 @@ import org.hawkular.commons.log.MsgLogger;
 import org.hawkular.commons.log.MsgLogging;
 import org.hawkular.handlers.RestEndpoint;
 import org.hawkular.handlers.RestHandler;
-import org.hawkular.services.inventory.InventoryService;
+import org.hawkular.services.inventory.InventoryServiceIspn;
 import org.hawkular.services.inventory.model.Metric;
 import org.hawkular.services.inventory.model.MetricUnit;
 import org.hawkular.services.inventory.model.Operation;
@@ -50,11 +50,11 @@ public class InventoryHandler implements RestHandler {
 
     private static final MsgLogger LOG = MsgLogging.getMsgLogger(InventoryHandler.class);
 
-    private final InventoryService inventoryService;
+    private final InventoryServiceIspn inventoryService;
 
     public InventoryHandler() {
         // TODO: injection, or what?
-        inventoryService = new InventoryService();
+        inventoryService = new InventoryServiceIspn();
         // Stub some data
         final Resource EAP1 = new Resource("EAP-1", "EAP-1", "EAP", "",
                 Arrays.asList("child-1", "child-2"), Arrays.asList("m-1", "m-2"), new HashMap<>());

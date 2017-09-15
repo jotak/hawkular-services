@@ -21,7 +21,7 @@ import junit.framework.AssertionFailedError;
 /**
  * @author Joel Takvorian
  */
-public class InventoryServiceTest {
+public class InventoryServiceIspnTest {
     private static final Resource EAP1 = new Resource("EAP-1", "EAP-1", "EAP", "",
             Arrays.asList("child-1", "child-2"), Arrays.asList("m-1", "m-2"), new HashMap<>());
     private static final Resource EAP2 = new Resource("EAP-2", "EAP-2", "EAP", "",
@@ -47,7 +47,7 @@ public class InventoryServiceTest {
     private static final Metric METRIC4
             = new Metric("m-4", "gc", "GC", MetricUnit.NONE, 10, new HashMap<>());
 
-    private InventoryService service = new InventoryService();
+    private InventoryServiceIspn service = new InventoryServiceIspn();
 
     @Before
     public void setUp() {

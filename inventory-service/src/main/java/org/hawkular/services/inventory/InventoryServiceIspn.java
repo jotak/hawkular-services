@@ -33,7 +33,7 @@ import org.hawkular.services.inventory.model.ResourceType;
 /**
  * @author Joel Takvorian
  */
-public class InventoryService {
+public class InventoryServiceIspn implements InventoryService {
     // Temp (ispn mock: stores)
     private Collection<Resource> allResources = new ArrayList<>();
     private Collection<Metric> allMetrics = new ArrayList<>();
@@ -46,18 +46,22 @@ public class InventoryService {
     private Map<String, Metric> metricsById = new HashMap<>();
     private Map<String, ResourceType> resourceTypesById = new HashMap<>();
 
+    @Override
     public void addResource(Resource r) {
         allResources.add(r);
     }
 
+    @Override
     public void addMetric(Metric m) {
         allMetrics.add(m);
     }
 
+    @Override
     public void addResourceType(ResourceType rt) {
         allResourceTypes.add(rt);
     }
 
+    @Override
     public void updateIndexes() {
         resourcesById = allResources.stream().collect(Collectors.toMap(Resource::getId, Function.identity()));
         resourcesByRoot = allResources.stream().collect(
@@ -68,10 +72,12 @@ public class InventoryService {
         resourceTypesById = allResourceTypes.stream().collect(Collectors.toMap(ResourceType::getId, Function.identity()));
     }
 
+    @Override
     public Optional<Resource> getResourceById(String id) {
         return Optional.ofNullable(resourcesById.get(id));
     }
 
+    @Override
     public Optional<ResourceNode> getTree(String parentId) {
         // Optimisation, make sure eveything gets in cache; can be removed safely
         resourcesByRoot.get(parentId);
@@ -80,23 +86,28 @@ public class InventoryService {
                 .map(r -> ResourceNode.fromResource(r, resourceTypesById::get, resourcesById::get, metricsById::get));
     }
 
+    @Override
     public Collection<Resource> getAllTopResources() {
         return resourcesByRoot.getOrDefault("", Collections.emptyList());
     }
 
+    @Override
     public Collection<ResourceType> getAllResourceTypes() {
         return allResourceTypes;
     }
 
+    @Override
     public Collection<Resource> getResourcesByType(String typeId) {
         return resourcesByType.getOrDefault(typeId, Collections.emptyList());
     }
 
+    @Override
     public Optional<Collection<Metric>> getResourceMetrics(String id) {
         return getResourceById(id)
                 .map(r -> r.getMetrics(metricsById::get));
     }
 
+    @Override
     public Optional<ResourceType> getResourceType(String typeId) {
         return Optional.ofNullable(resourceTypesById.get(typeId));
     }
