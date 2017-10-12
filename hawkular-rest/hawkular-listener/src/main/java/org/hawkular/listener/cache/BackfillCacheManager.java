@@ -41,7 +41,6 @@ import javax.naming.InitialContext;
 
 import org.hawkular.inventory.api.InventoryService;
 import org.hawkular.inventory.api.ResourceFilter;
-import org.hawkular.inventory.api.model.ResourceWithType;
 import org.hawkular.inventory.api.model.ResultSet;
 import org.hawkular.listener.MIQEventUtils;
 import org.hawkular.metrics.core.service.MetricsService;
@@ -373,14 +372,14 @@ public class BackfillCacheManager implements BackfillCache {
 
     private List<MetricResource> getAvailMetricsForFeed(String feedId) {
         ResourceFilter filter = ResourceFilter.forFeed(feedId).build();
-        ResultSet<ResourceWithType> rs = inventoryService.getResources(filter);
+        ResultSet<org.hawkular.inventory.api.model.Resource> rs = inventoryService.getResources(filter);
         long resultSetSize = rs.getResultSize();
         long startOffset = rs.getStartOffset();
         long rsSize;
         int maxResults = 100;
         List<MetricResource> availMetrics = new ArrayList<>();
         do {
-            for (ResourceWithType resource : rs.getResults()) {
+            for (org.hawkular.inventory.api.model.Resource resource : rs.getResults()) {
                 for (org.hawkular.inventory.api.model.Metric metric : resource.getMetrics()) {
                     if (metric.getType().equals(MetricType.AVAILABILITY.getText())) {
                         availMetrics.add(new MetricResource(resource.getId(), metric));
