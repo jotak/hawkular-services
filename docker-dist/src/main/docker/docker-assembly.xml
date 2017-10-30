@@ -64,11 +64,6 @@
       <fileMode>755</fileMode>
     </file>
     <file>
-      <source>src/main/resources/check-cnode.sh</source>
-      <outputDirectory>/opt/hawkular/bin</outputDirectory>
-      <fileMode>755</fileMode>
-    </file>
-    <file>
       <source>${project.build.directory}/${project.build.finalName}/bin/hawkular-javaagent.jar</source>
       <outputDirectory>${docker.jboss_home}/bin</outputDirectory>
     </file>
@@ -91,18 +86,6 @@
     </file>
     <file>
       <source>${project.build.directory}/${project.build.finalName}/standalone/configuration/hawkular-javaagent-config-ssl.yaml</source>
-      <outputDirectory>${docker.jboss_home}/standalone/configuration</outputDirectory>
-    </file>
-    <file>
-      <source>${project.build.directory}/${project.build.finalName}/standalone/configuration/hawkular-wildfly-agent-installer.jar</source>
-      <outputDirectory>${docker.jboss_home}/standalone/configuration</outputDirectory>
-    </file>
-    <file>
-      <source>${project.build.directory}/${project.build.finalName}/standalone/configuration/hawkular-wildfly-agent-wf-extension.zip</source>
-      <outputDirectory>${docker.jboss_home}/standalone/configuration</outputDirectory>
-    </file>
-    <file>
-      <source>${project.build.directory}/${project.build.finalName}/standalone/configuration/hawkular-wildfly-agent-wf-extension-eap6.zip</source>
       <outputDirectory>${docker.jboss_home}/standalone/configuration</outputDirectory>
     </file>
     <file>
